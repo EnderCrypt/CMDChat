@@ -7,6 +7,7 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.concurrent.TimeoutException;
 
+import com.github.endercrypt.Main;
 import com.github.endercrypt.NetworkMessage;
 import com.github.endercrypt.NetworkMessageType;
 import com.github.endercrypt.exception.ClientIllegalAction;
@@ -24,7 +25,7 @@ public class ServerConnection implements Runnable
 	{
 		this.socket = socket;
 		socket.setTcpNoDelay(true);
-		System.out.println("Receiving connection from " + getHostAddress() + "...");
+		Main.println(System.out, "Receiving connection from " + getHostAddress() + "...");
 //		oos = new ObjectOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 //		ois = new ObjectInputStream(new BufferedInputStream(socket.getInputStream()));
 		oos = new ObjectOutputStream(socket.getOutputStream());
@@ -42,7 +43,7 @@ public class ServerConnection implements Runnable
 			}
 			catch (SocketException e)
 			{
-				return;
+				return;//TODO: questionable
 			}
 			catch (IOException | ClassNotFoundException | ClientIllegalAction e)
 			{
@@ -61,9 +62,14 @@ public class ServerConnection implements Runnable
 		}
 		catch (IOException e)
 		{
-			System.err.println("Failed to properly close connection (this could lead to resource leaks)");
+			Main.println(System.err, "Failed to properly close connection (this could lead to resource leaks)");
 			e.printStackTrace();
 		}
+	}
+	
+	public String getName()
+	{
+		return name;
 	}
 
 	@Override
@@ -84,7 +90,6 @@ public class ServerConnection implements Runnable
 
 	public synchronized void send(NetworkMessage msg) throws IOException
 	{
-		//oos.reset();
 		oos.writeObject(msg);
 		oos.flush();
 	}
@@ -104,8 +109,6 @@ public class ServerConnection implements Runnable
 	public void pingCheck() throws IOException, TimeoutException
 	{
 		pingTimer++;
-//		if (pingTimer > 100)
-//		System.out.println(this+": "+pingTimer);
 		if (pingTimer / ServerPinger.CHECK_FREQUENCY == ServerPinger.TIMEOUT)
 		{
 			throw new TimeoutException();
@@ -117,41 +120,58 @@ public class ServerConnection implements Runnable
 		pingTimer = 0;
 		switch (msg.getType())
 		{
-		case DISCONNECT:
+		case DISCONNECT_REQUEST:
 			if (msg.getData() != null)
 			{
 				throw new ClientIllegalAction("Sent disallowed object through DISCONNECT");
 			}
-			send(new NetworkMessage(NetworkMessageType.DISCONNECT, null));
+			send(new NetworkMessage(NetworkMessageType.DISCONNECT_REQUEST, null));
 			Server.disconnectConnection(this);
 			Server.connections.remove(this);
-			break;
+		break;
 		case PING:
 			if (msg.getData() != null)
 			{
 				throw new ClientIllegalAction("Sent disallowed object through PING");
 			}
 			sendPing();
-			break;
-		case NAME_SET_REQUEST:
+		break;
+		case NAME_REQUEST:
 			if (name == null)
 			{
-				name = (String) msg.getData();
-				System.out.println(getHostAddress() + " joined (" + name + ")");
-				Server.broadcast(new NetworkMessage(NetworkMessageType.CHAT_MESSAGE, name + " Joined the chat!"));
+				String getName = (String) msg.getData();
+				for (ServerConnection svc : Server.connections)
+				{
+					String name = svc.getName();
+					if ((name != null) && (name.equalsIgnoreCase(getName)))
+					{
+						send(new NetworkMessage(NetworkMessageType.NAME_REQUEST, false));
+						return;
+					}
+				}
+				send(new NetworkMessage(NetworkMessageType.USERLIST, Server.getUserNames()));
+				name = getName;
+				send(new NetworkMessage(NetworkMessageType.NAME_REQUEST, true));
+				Main.println(System.out, getHostAddress() + " joined (" + name + ")");
+				Server.broadcast(new NetworkMessage(NetworkMessageType.USER_JOINED, name));
 			}
 			else
 			{
 				throw new ClientIllegalAction("tried to set name twice");
 			}
-			break;
+		break;
 		case CHAT_MESSAGE:
 			if (name == null)
 			{
 				throw new ClientIllegalAction("sent a chat message whitout setting a username");
 			}
+			if (((String)msg.getData()).length() > 1)
 			Server.broadcast(new NetworkMessage(NetworkMessageType.CHAT_MESSAGE, name + ": " + msg.getData())); // send same message to everyone
-			break;
+		break;
+		case USER_JOINED:
+			throw new ClientIllegalAction("sent a USER_JOINED (not allowed)");
+		case USER_LEFT:
+			throw new ClientIllegalAction("sent a USER_LEFT (not allowed)");
 		default:
 			throw new ClientIllegalAction("sent unknown data type");
 		}

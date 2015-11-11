@@ -1,9 +1,12 @@
 package com.github.endercrypt;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 
@@ -21,8 +24,9 @@ public final class Main
 
 	public static void main(String[] args) throws IOException
 	{
+		connectTo = InetAddress.getByName("83.251.218.37");
 		parameters(args);
-		System.out.println("Using port: " + port);
+		Main.println(System.out, "Using port: " + port);
 		if (runAsServer)
 		{
 			Server.run();
@@ -39,7 +43,6 @@ public final class Main
 				System.exit(-1);
 			}
 		}
-		System.out.println("The application has reached an (unexpected) end");
 	}
 
 	public static void parameters(String[] args)
@@ -98,5 +101,11 @@ public final class Main
 				break;
 			}
 		}
+	}
+
+	public static void println(PrintStream ps, String message)
+	{
+		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
+		ps.println(sdf.format(new Date())+": "+message);
 	}
 }

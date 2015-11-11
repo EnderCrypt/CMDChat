@@ -18,23 +18,19 @@ public class ClientPinger implements Runnable
 			try
 			{
 				Thread.sleep(1000 / CHECK_FREQUENCY);
+				if ((Client.isConnected()) && (pingCheck() == false))
+				{
+					return;
+				}
 			}
-			catch (InterruptedException e)
-			{
-				e.printStackTrace();
-			}
-			try
-			{
-				pingCheck();
-			}
-			catch (IOException e)
+			catch (IOException | InterruptedException e)
 			{
 				e.printStackTrace();
 			}
 		}
 	}
 
-	private void pingCheck() throws IOException
+	private boolean pingCheck() throws IOException
 	{
 		silenceTimer++;
 		pingTimer++;
@@ -45,9 +41,11 @@ public class ClientPinger implements Runnable
 		}
 		if (silenceTimer / CHECK_FREQUENCY == TIMEOUT)
 		{
-			System.err.println("Server timed out!");
-			System.exit(-1);
+			Client.frame.addMessage("Server timed out! please reconnect");
+			Client.breakConnection();
+			return false;
 		}
+		return true;
 	}
 
 	public void report()

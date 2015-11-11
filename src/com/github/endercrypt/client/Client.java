@@ -5,85 +5,52 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ConnectException;
 import java.net.Socket;
-import java.util.Scanner;
 
 import com.github.endercrypt.Main;
 import com.github.endercrypt.NetworkMessage;
 import com.github.endercrypt.NetworkMessageType;
+import com.github.endercrypt.client.gui.Frame;
 
 public class Client
 {
 	private static Socket socket;
 	private static ObjectOutputStream oos;
 	private static ObjectInputStream ois;
-
 	private static ClientConnection clientConnection;
-
-	private static Scanner scanner = new Scanner(System.in);
+	public static final Frame frame = new Frame();
+	public static boolean hasSetName = false;
+	private static boolean connectionReady = false;
 
 	public static void run()
 	{
-		System.out.println("Connecting to server server...");
+		frame.addMessage("Using port: " + Main.port);
+		frame.addMessage("Connecting to server server...");
 		try
 		{
 			socket = new Socket(Main.connectTo, Main.port);
 			socket.setTcpNoDelay(true);
+			// prepare streams
+			oos = new ObjectOutputStream(socket.getOutputStream());
+			ois = new ObjectInputStream(socket.getInputStream());
+			connectionReady();
 		}
 		catch (ConnectException e)
 		{
-			System.err.println("Failed to connect to server!");
-			System.exit(-1);
+			frame.addMessage("Failed to connect to server!");
 		}
 		catch (IOException e)
 		{
 			e.printStackTrace();
-			System.exit(-1);
+			frame.addMessage("Error occured!");
 		}
-		// prepare streams
-		try
+		if (connectionReady)
 		{
-//			oos = new ObjectOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-//			ois = new ObjectInputStream(new BufferedInputStream(socket.getInputStream()));
-			oos = new ObjectOutputStream(socket.getOutputStream());
-			ois = new ObjectInputStream(socket.getInputStream());
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-		// start message sender
-		clientConnection = new ClientConnection();
-		new Thread(clientConnection).start();
-		// start chat
-		System.out.println("Welcome to the chat!");
-		System.out.print("Please enter a name: ");
-		String name = scanner.nextLine();
-		try
-		{
-			Client.send(new NetworkMessage(NetworkMessageType.NAME_SET_REQUEST, name));
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
-		while (true)
-		{
-			String message = scanner.nextLine();
-			try
-			{
-				if (message.equalsIgnoreCase("/exit"))
-				{
-					send(new NetworkMessage(NetworkMessageType.DISCONNECT, null));
-				}
-				else
-				{
-					Client.send(new NetworkMessage(NetworkMessageType.CHAT_MESSAGE, message));
-				}
-			}
-			catch (IOException e)
-			{
-				e.printStackTrace();
-			}
+			// start message sender
+			clientConnection = new ClientConnection();
+			new Thread(clientConnection).start();
+			// start chat
+			frame.addMessage("Welcome to the chat!");
+			frame.addMessage("Please enter a name");
 		}
 	}
 
@@ -91,17 +58,50 @@ public class Client
 	{
 		return ois.readObject();
 	}
+	
+	private static void connectionReady()
+	{
+		connectionReady = true;
+		frame.enableInput(true);
+	}
+	
+	public static void breakConnection()
+	{
+		connectionReady = false;
+		frame.enableInput(false);
+	}
+	
+	public static boolean isConnected()
+	{
+		return connectionReady;
+	}
 
 	public static synchronized void send(NetworkMessage msg) throws IOException
 	{
-		//oos.reset();
-		oos.writeObject(msg);
-		oos.flush();
+		if (connectionReady)
+		{
+			oos.writeObject(msg);
+			oos.flush();
+		}
+		else
+		{
+			Client.frame.addMessage("Connection offline/not ready!");
+		}
 	}
 
 	public static void sendPing() throws IOException
 	{
 		send(new NetworkMessage(NetworkMessageType.PING, null));
+	}
+	
+	public static void sendDisconnect() throws IOException
+	{
+		send(new NetworkMessage(NetworkMessageType.DISCONNECT_REQUEST, null));
+	}
+	
+	public static void sendChatMessage(String message) throws IOException
+	{
+		Client.send(new NetworkMessage(NetworkMessageType.CHAT_MESSAGE, message));
 	}
 
 	public void close()
@@ -112,7 +112,7 @@ public class Client
 		}
 		catch (IOException e)
 		{
-			System.err.println("Failed to properly close connection (this could lead to resource leaks)");
+			frame.addMessage("Failed to properly close connection (this could lead to resource leaks)");
 			e.printStackTrace();
 		}
 	}
