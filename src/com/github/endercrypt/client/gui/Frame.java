@@ -129,7 +129,6 @@ public class Frame extends JFrame
 			public void actionPerformed(ActionEvent e)
 			{
 				Client.frame.sendChatMessage();
-				Client.frame.enableInput(false);
 			}
 		});
 		contentPane.add(textField, BorderLayout.PAGE_END);
